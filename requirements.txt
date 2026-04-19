@@ -1,0 +1,5 @@
+mediafiredl
+requests
+beautifulsoup4
+patool
+colorama
