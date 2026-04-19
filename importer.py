@@ -112,29 +112,33 @@ def download_mediafire(url, tmp_dir):
         print_status("!", "Check the URL and your internet connection.")
         sys.exit(1)
 
-_SETTINGS_FILENAMES = {
+_ANCHOR_FILENAMES = {
     "mods.json", "general.json", "controls.json",
     "performance.json", "staff_mods.json",
 }
 
+def _find_profile_root(directory):
+    """Return the directory that contains at least one known Lunar Client JSON."""
+    root = Path(directory)
+    for fpath in root.rglob("*"):
+        if fpath.is_file() and fpath.name in _ANCHOR_FILENAMES:
+            return fpath.parent
+    return None
+
 def _scan_extracted(directory):
-    single = None
-    multi_files = []
+    profile_root = _find_profile_root(directory)
+    if profile_root:
+        return "multi", profile_root
+
+    # Fallback: single-file profile with modSettings key
     for fpath in Path(directory).rglob("*.json"):
-        fname = fpath.name
-        if fname in _SETTINGS_FILENAMES:
-            multi_files.append((str(fpath), fname))
-        else:
-            try:
-                data = json.loads(fpath.read_text(encoding="utf-8"))
-                if "modSettings" in data:
-                    single = str(fpath)
-            except Exception:
-                pass
-    if multi_files:
-        return "multi", multi_files
-    if single:
-        return "single", single
+        try:
+            data = json.loads(fpath.read_text(encoding="utf-8"))
+            if "modSettings" in data:
+                return "single", str(fpath)
+        except Exception:
+            pass
+
     return "unknown", None
 
 def extract_archive(archive_path, tmp_dir):
@@ -181,7 +185,7 @@ def _backup_file(path):
 _PM_FILENAME = "profilemanager.json"
 
 
-def install_multi(settings_files, display_name):
+def install_multi(profile_root, display_name):
     settings_dir = _lunar_settings_dir()
     if not settings_dir.exists():
         print_status("x", f"Lunar Client settings directory not found: {settings_dir}")
@@ -192,9 +196,8 @@ def install_multi(settings_files, display_name):
     if profile_dir.exists():
         _confirm_overwrite(name)
         shutil.rmtree(profile_dir)
-    profile_dir.mkdir()
-    for src_path, fname in settings_files:
-        shutil.copy2(src_path, profile_dir / fname)
+    shutil.copytree(str(profile_root), str(profile_dir))
+    for fname in sorted(p.name for p in Path(profile_root).iterdir()):
         print_status("v", f"Installed {fname}")
     pm_path = settings_dir / _PM_FILENAME
     if not pm_path.exists():
@@ -288,8 +291,8 @@ def main():
             sys.exit(1)
 
         if fmt == "multi":
-            fnames = [f for _, f in result]
-            print_status("~", f"Found settings files: {"".join(fnames)}")
+            fnames = ", ".join(sorted(p.name for p in Path(result).iterdir()))
+            print_status("~", f"Found settings files: {fnames}")
             suggested = Path(file_path).stem
             print(f"Display name [{suggested}]: ", end="", flush=True)
             display_name = input().strip() or suggested
