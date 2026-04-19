@@ -89,7 +89,11 @@ def is_lunar_running():
     return False
 
 def detect_input_type(raw):
-    raw = raw.strip().strip('"').strip("'")
+    raw = raw.strip()
+    # PowerShell drag-and-drop produces: & 'C:\pathile.zip'
+    if raw.startswith("& "):
+        raw = raw[2:].strip()
+    raw = raw.strip('"').strip("'")
     if raw.startswith("https://") or raw.startswith("http://"):
         return "url", raw
     return "file", raw
